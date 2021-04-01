@@ -1,0 +1,19 @@
+section text
+INPUT N1
+INPUT N2
+LOAD N1
+JMP L1
+STOP
+L1: ADD N2
+STORE N3
+JMP L2
+STOP
+L2: OUTPUT N3
+STOP
+
+section data
+N1: SPACE
+N2: SPACE
+N3: SPACE
+
+
