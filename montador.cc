@@ -83,7 +83,7 @@ int contains(string s, string search){
 
 //recebe uma string e retorna true se essa string eh composta somente de digitos e falso caso contrario
 bool isInteger(string s){
-    return s.find_first_not_of("0123456789") == string::npos;
+    return s.find_first_not_of("-0123456789") == string::npos;
 }
 
 
