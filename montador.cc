@@ -13,7 +13,6 @@ using namespace std;
 
 //TABELA DE INSTRUCOES, first = nome, second = tamanho
 list<pair<string, int>> instructions_table;
-
 //BUSCA ITEM NA TABELA DE INSTRUCOES, retorna o tamanho da instrucao, 
 //ou -1 caso nao seja encontrada.
 int search_instruction(string ins){
@@ -37,26 +36,8 @@ int get_opcode(string ins){
 }
 
 
-
-//TABELA DE SIMBOLOS, first = label, second = valor armazenado
-list<pair<string, int>> symbols_table;
-
-//BUSCA ITEM NA TABELA DE SIMBOLOS, retorna a posicao na memoria, 
-//ou -1 caso a label nao seja encontrada.
-int search_symbol(string label){
-    for(auto symbol : symbols_table){
-        if(symbol.first == label){
-            return symbol.second;
-        }
-    }
-    return -1;
-}
-
-
-
 //TABELA DE DIRETIVAS, first = nome da diretiva, second = espaco ocupado
 list<pair<string, int>> directives_table;
-
 //BUSCA DIRETIVA NA TABELA, retorna o espaco reservado pela diretiva, caso encontrado,
 //ou -1 caso a diretiva nao seja encontrada.
 int search_directive(string name) {
@@ -69,6 +50,17 @@ int search_directive(string name) {
 }
 
 
+//BUSCA ITEM NA TABELA DE SIMBOLOS, retorna a posicao na memoria, 
+//ou -1 caso a label nao seja encontrada.
+int search_symbol(list<pair<string, int>> symbols_table, string label){
+    for(auto symbol : symbols_table){
+        if(symbol.first == label){
+            return symbol.second;
+        }
+    }
+    return -1;
+}
+
 
 //checa se uma string contem outra string, retorna a posicao da primeira ocorrencia da
 //substring, caso encontrada, ou -1, caso nao encontrada.
@@ -80,46 +72,34 @@ int contains(string s, string search){
 }
 
 
-
 //recebe uma string e retorna true se essa string eh composta somente de digitos e falso caso contrario
 bool isInteger(string s){
     return s.find_first_not_of("-0123456789") == string::npos;
 }
 
 
+//flag controlando se ha mais de um arquivo
+bool more_than_one_file = false;
 
-int main (int argc, char **argv) {
 
-    if(argc < 2){
-        cout << "erro, necessario informar nome do arquivo" << endl;
-        return 0;
-    }
+//recebe qual arquivo deve ser montado
+void mount(string file_name){
+    
+    //TABELA DE SIMBOLOS, first = label, second = valor armazenado
+    list<pair<string, int>> symbols_table;
+    
+    //TABELA DE USO, first = label, second = posicao que foi usado
+    list<pair<string, int>> use_table;
 
-    ifstream input_file(argv[1]);
+    //TABELA DE DEFINICOES
+    list<pair<string, int>> definitions_table;
+
+    ifstream input_file(file_name);
     if(!input_file.is_open()){
         cout << "falha ao abrir o arquivo informado" << endl;
-        return 0;
+        return;
     }
 
-    //INICIALIZANDO TABELA DE DIRETIVAS    
-    directives_table.push_back(make_pair("const", 1));
-    directives_table.push_back(make_pair("space", 1));
-
-    //INICIALIZANDO TABELA DE INSTRUCOES
-    instructions_table.push_back(make_pair("add", 2));
-    instructions_table.push_back(make_pair("sub", 2));
-    instructions_table.push_back(make_pair("mult", 2));
-    instructions_table.push_back(make_pair("div", 2));
-    instructions_table.push_back(make_pair("jmp", 2));
-    instructions_table.push_back(make_pair("jmpn", 2));
-    instructions_table.push_back(make_pair("jmpp", 2));
-    instructions_table.push_back(make_pair("jmpz", 2));
-    instructions_table.push_back(make_pair("copy", 3));
-    instructions_table.push_back(make_pair("load", 2));
-    instructions_table.push_back(make_pair("store", 2));
-    instructions_table.push_back(make_pair("input", 2));
-    instructions_table.push_back(make_pair("output", 2));
-    instructions_table.push_back(make_pair("stop", 1));
 
     //LINHAS DO PROGRAMA, JÁ PROCESSADAS
     list<string> processed_lines;
@@ -173,20 +153,40 @@ int main (int argc, char **argv) {
     //SE HA AS DUAS SECOES, E DATA VEM ANTES DE TEXT, INVERTEM-SE AS SECOES
     if(text_pos != -1 && data_pos != -1){
         if(data_pos < text_pos){
+            
+            string begin;
+            string end;
+            int i=0;
+            if(more_than_one_file == true){
+                begin = processed_lines.front();
+                end = processed_lines.back();
+                processed_lines.pop_front();
+                processed_lines.pop_back();
+                i=1;
+            }
+
+
             //levando a section data de cima para baixo
-            for(int i = 0; i < text_pos; i++){
+            for(; i < text_pos; i++){
                 string aux = processed_lines.front();
                 processed_lines.pop_front();
                 processed_lines.push_back(aux);
             }
 
+            if(more_than_one_file == true){
+                processed_lines.push_front(begin);
+                processed_lines.push_back(end);
+            }
+
         }
     }
 
-
-
     //PRIMEIRA PASSAGEM
     int location_counter=0;
+
+    //usado para verificar presenca de begin e end, quando necessario
+    int begin_end = 0;
+    list <string> temp_definitions_table;
     for(auto line: processed_lines){
         
         //pulando linhas de declaracao de secao
@@ -197,6 +197,13 @@ int main (int argc, char **argv) {
         //removendo virgulas
         if(contains(line, "copy") != -1) {
             replace(line.begin(), line.end(), ',', ' ');
+        }
+
+        //label externa encontrada
+        if(contains(line, "extern") != -1){
+            string aux = line.substr(0, line.find(':'));
+            //-9 no tamanho, indica que a label eh externa
+            symbols_table.push_back(make_pair(aux, -9));
         }
 
         stringstream ss(line);
@@ -214,22 +221,26 @@ int main (int argc, char **argv) {
 
         //numero de operandos esperados a seguir
         int expected_next = 0;
+        bool last_was_public = false;
         for(string token: tokens){
 
             //esperam-se operandos, porem no momento, nao é necessario fazer nada
             if(expected_next > 0){
-                continue;
+                if(last_was_public){
+                    temp_definitions_table.push_back(token);
+                    last_was_public = false;
+                    expected_next--;
+                }
+                else {
+                    continue;
+                }
             }
 
             //o token eh uma label
             else if(contains (token, ":") != -1){
                 string aux = token.substr(0, token.size()-1);
-                if(search_symbol(aux) != -1){
-                    cout << "Erro Semantico: Label ja definida." << endl << line << endl;
-                    return 0; 
-                }
-                else{
-                    symbols_table.push_back(make_pair(aux, location_counter));
+                if(search_symbol(symbols_table, aux) == -1){
+                     symbols_table.push_back(make_pair(aux, location_counter));
                 }
             }
 
@@ -248,20 +259,16 @@ int main (int argc, char **argv) {
                     if(contains(token, "const") != -1){
                         expected_next = 1;
                     }
-                    else{
-                        expected_next = dir_size - 1;
+                    if(contains(token, "public") != -1){
+                        last_was_public=true;
+                        expected_next = 1;
                     }
-                }
-                //se o token nao eh uma operacao, um erro pode ser lancado
-                else {
-                    cout << "Erro Lexico: Operacao invalida / Token nao identificado." << endl  << line << endl;
-                    return 0;
-                }
-
-                //se a quantidade de tokens restantes na linha, for diferente da qtd de tokens que a operacao espera, lanca-se um erro
-                if(tokens.size() - token_counter - 1 != expected_next){
-                    cout << "Erro Sintatico: Numero de operandos incorreto" << endl << line << endl;
-                    return 0;
+                    if(contains(token, "begin") != -1 || contains(token, "end") != -1){
+                        begin_end++;
+                    }
+                    else{
+                        expected_next = 0;
+                    }
                 }
 
             }
@@ -269,10 +276,28 @@ int main (int argc, char **argv) {
         }
     }
 
+    if(more_than_one_file){
+        if(begin_end != 2){
+            cout << "begin e end são obrigatórios, erro!" << endl;
+            return;
+        }
+    }
+    else{
+        if(begin_end > 0){
+            cout << "begin e end só devem ser usados quando montando mais de um arquivo, erro!" << endl;
+            return;
+        }
+    }
+
+    //copiando dados da tabela de simbolos para a de definicoes
+    for(string s: temp_definitions_table){
+        pair <string, int> aux = make_pair(s, search_symbol(symbols_table, s));
+        definitions_table.push_back(aux);
+    }
+
     //lista com as strings resultantes da montagem
     list<string> result;
-
-
+    string realocation = "";
     //SEGUNDA PASSAGEM
     location_counter = 0;
     for(auto line: processed_lines){
@@ -318,19 +343,27 @@ int main (int argc, char **argv) {
                     //se for const, o resultado eh o proprio resultado
                     if(!isInteger(token)){
                         cout << "Erro Lexico: Valor de operando incorreto" << endl << line << endl;
-                        return 0;
+                        return;
                     }
                     result.push_back(token);
+                    realocation.append("0");
                     last_was_const = false;
                 }
                 else {
-                    int aux = search_symbol(token);
-                    if(aux != -1){
+                    int aux = search_symbol(symbols_table, token);
+                    //quando extern
+                    if(aux == -9){
+                        use_table.push_back(make_pair(token, location_counter-1));
+                        result.push_back("0");
+                        realocation.append("0");
+                    }
+                    else if(aux != -1){
                         result.push_back(to_string(aux));
+                        realocation.append("1");
                     }
                     else{
                         cout << "Erro Semantico: Simbolo nao encontrado/nao declarado." << endl << line << endl;
-                        return 0;
+                        return;
                     }
                 }
                 expected_next--;
@@ -342,6 +375,7 @@ int main (int argc, char **argv) {
 
                 if(inst_size != -1) {
                     result.push_back(to_string(get_opcode(token)));
+                    realocation.append("0");
                     location_counter += inst_size;
                     expected_next = inst_size - 1;
                 }
@@ -352,8 +386,9 @@ int main (int argc, char **argv) {
                         last_was_const = true;
                         expected_next = 1;
                     }
-                    else{
+                    else if (contains(token, "space") != -1){
                         result.push_back("0");
+                        realocation.append("0");
                         expected_next = dir_size - 1;
                     }
                 }
@@ -362,11 +397,8 @@ int main (int argc, char **argv) {
             }
         }
     }
-    
-
-
     //GERANDO ARQUIVO OBJ
-    string output_name (argv[1]);
+    string output_name = file_name;
 
     //gernado nome do arquivo resultante
     if(output_name.find('.') != string::npos){
@@ -377,12 +409,74 @@ int main (int argc, char **argv) {
     }
 
     ofstream output (output_name);
+    output << "H: " << output_name.substr(0, output_name.find('.')) << endl;
+    output << "H: " << location_counter << endl;
+    output << "H: " << realocation << endl;
+
+    if(more_than_one_file){
+        for(auto a: use_table){
+            output << "U: " << a.first << " " << a.second << endl;
+        }   
+    
+        for(auto a: definitions_table) {
+            output << "D: " << a.first << " " << a.second << endl;
+        }
+    }
+
+    output << "T: ";
     for(auto r : result){
         output << r + " ";
     }
     output << endl;
 
     output.close();
+
+    return;
+}
+
+
+int main (int argc, char **argv) {
+
+    //INICIALIZANDO TABELA DE DIRETIVAS    
+    directives_table.push_back(make_pair("const", 1));
+    directives_table.push_back(make_pair("space", 1));
+    directives_table.push_back(make_pair("extern", 0));
+    directives_table.push_back(make_pair("public", 0));
+    directives_table.push_back(make_pair("begin", 0));
+    directives_table.push_back(make_pair("end", 0));
+
+    //INICIALIZANDO TABELA DE INSTRUCOES
+    instructions_table.push_back(make_pair("add", 2));
+    instructions_table.push_back(make_pair("sub", 2));
+    instructions_table.push_back(make_pair("mult", 2));
+    instructions_table.push_back(make_pair("div", 2));
+    instructions_table.push_back(make_pair("jmp", 2));
+    instructions_table.push_back(make_pair("jmpn", 2));
+    instructions_table.push_back(make_pair("jmpp", 2));
+    instructions_table.push_back(make_pair("jmpz", 2));
+    instructions_table.push_back(make_pair("copy", 3));
+    instructions_table.push_back(make_pair("load", 2));
+    instructions_table.push_back(make_pair("store", 2));
+    instructions_table.push_back(make_pair("input", 2));
+    instructions_table.push_back(make_pair("output", 2));
+    instructions_table.push_back(make_pair("stop", 1));
+
+    if(argc < 2){
+        cout << "erro, necessario informar nome do arquivo" << endl;
+        return 0;
+    }
+
+    if(argc > 2) {
+        more_than_one_file = true;
+    }
+    else {
+        more_than_one_file = false;
+    }
+
+    //enviando arquivos para serem montados
+    for(int i = 1; i<argc; i++){
+        mount(argv[i]);
+    }
 
     return 0;
 }
