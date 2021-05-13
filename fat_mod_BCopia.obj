@@ -1,8 +1,0 @@
-H: fat_mod_BCopia
-H: 11
-H: 01000001000
-U: n 3
-U: n 5
-U: fat 9
-D: mod_b 0
-T: 11 10 3 0 11 0 10 10 5 0 0

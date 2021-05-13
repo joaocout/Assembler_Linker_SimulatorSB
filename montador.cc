@@ -227,7 +227,6 @@ void mount(string file_name){
             //esperam-se operandos, porem no momento, nao é necessario fazer nada
             if(expected_next > 0){
                 if(last_was_public){
-                    cout << "aaa" << endl;
                     temp_definitions_table.push_back(token);
                     last_was_public = false;
                     expected_next--;
@@ -261,7 +260,6 @@ void mount(string file_name){
                         expected_next = 1;
                     }
                     else if(contains(token, "public") != -1){
-                        cout << "olar" << endl;
                         last_was_public=true;
                         expected_next = 1;
                     }
@@ -293,13 +291,8 @@ void mount(string file_name){
 
     //copiando dados da tabela de simbolos para a de definicoes
     for(string s: temp_definitions_table){
-        cout << s << endl;
         pair <string, int> aux = make_pair(s, search_symbol(symbols_table, s));
         definitions_table.push_back(aux);
-    }
-
-    for(auto a: definitions_table){
-        cout << a.first << " DDDDDD" << a.second << endl;
     }
 
     //lista com as strings resultantes da montagem
@@ -455,7 +448,7 @@ int main (int argc, char **argv) {
     //INICIALIZANDO TABELA DE INSTRUCOES
     instructions_table.push_back(make_pair("add", 2));
     instructions_table.push_back(make_pair("sub", 2));
-    instructions_table.push_back(make_pair("mult", 2));
+    instructions_table.push_back(make_pair("mul", 2));
     instructions_table.push_back(make_pair("div", 2));
     instructions_table.push_back(make_pair("jmp", 2));
     instructions_table.push_back(make_pair("jmpn", 2));
